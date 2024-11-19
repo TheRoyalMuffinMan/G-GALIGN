@@ -9,7 +9,7 @@ class CommandLineArgs {
         CommandLineArgs(int argc, char* argv[]);
         ~CommandLineArgs();
         void usage() const;
-        void parse();
+        int parse();
     
         std::string query;
         std::string reference;

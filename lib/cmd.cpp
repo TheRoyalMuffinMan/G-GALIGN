@@ -1,4 +1,4 @@
-#include "cmd.h"
+#include "cmd.hpp"
 #include <iostream>
 #include <getopt.h>
 
@@ -22,7 +22,7 @@ void CommandLineArgs::usage() const {
               << "  -h, --help                      Show this help message and exit\n";
 }
 
-void CommandLineArgs::parse() {
+int CommandLineArgs::parse() {
     struct option long_options[] = {
         {"query", required_argument, NULL, 'q'},
         {"reference", required_argument, NULL, 'r'},
@@ -63,6 +63,9 @@ void CommandLineArgs::parse() {
             default:
                 std::cout << "Invalid option or missing argument" << std::endl;
                 usage();
+                return 1;
         }
     }
+
+    return 0;
 }

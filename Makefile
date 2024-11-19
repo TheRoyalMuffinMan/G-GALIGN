@@ -1,33 +1,45 @@
 # Compiler and flags
 CC = g++
 CFLAGS = -Wall -g
-LIBRARY_NAME = galignlib
-LIBRARY_SRC = lib/cmd.cpp lib/parser.cpp
-LIBRARY_OBJ = lib/cmd.o lib/parser.o
 SINGLE = galign_benchmark
 MULTI = galign_multi
 GPU = galign_gpu
-LIBRARY_PATH = /lib
-INCLUDE_PATH = /include
+OBJDIR = build
+INCLUDE_PATH = ./include
+BUILD_PATH = ./build   # Compiled files will be placed here
+LIBRARY_NAME = galign
+LIBRARY_SRC = lib/cmd.cpp lib/parser.cpp
+LIBRARY_OBJ = $(OBJDIR)/cmd.o $(OBJDIR)/parser.o
+SHARED_OBJECT = $(OBJDIR)/lib$(LIBRARY_NAME).so
 
-# Targets
-all: $(SINGLE) # $(MULTI) $(GPU)
+# Create build directories if they don't exist
+$(shell mkdir -p $(OBJDIR) $(BUILD_PATH))
 
-$(SINGLE): galign_benchmark.cpp $(LIBRARY_OBJ)
-	$(CC) $(CFLAGS) -o $(SINGLE) galign_benchmark.cpp -I$(INCLUDE_PATH) -L$(LIBRARY_PATH) -l$(LIBRARY_NAME)
+# Default target
+all: $(SHARED_OBJECT) $(SINGLE) # $(MULTI) $(GPU)
 
-# Not yet implemented
-# $(MULTI): galign_multi.cpp $(LIBRARY_OBJ)
-# 	$(CC) $(CFLAGS) -o $(EXEC) galign_multi.cpp -I$(INCLUDE_PATH) -L$(LIBRARY_PATH) -l$(LIBRARY_NAME)
+# Singlethreaded execution target
+$(SINGLE): $(SINGLE).cpp $(LIBRARY_OBJ)
+	$(CC) $(CFLAGS) -o $(OBJDIR)/$(SINGLE) $(SINGLE).cpp -I$(INCLUDE_PATH) -L$(BUILD_PATH) -lgalign 
 
-# $(GPU): galign_gpu.cpp $(LIBRARY_OBJ)
-# 	$(CC) $(CFLAGS) -o $(EXEC) galign_gpu.cpp -I$(INCLUDE_PATH) -L$(LIBRARY_PATH) -l$(LIBRARY_NAME)
+# Multithreaded executable target (not implemented yet)
+# $(MULTI): $(MULTI).cpp $(LIBRARY_OBJ)
+#	$(CC) $(CFLAGS) -o $(OBJDIR)/$(MULTI) $(MULTI).cpp -I$(INCLUDE_PATH) -L$(BUILD_PATH) -lgalign 
 
-$(LIBRARY_OBJ): $(LIBRARY_SRC)
-	$(CC) $(CFLAGS) -fPIC -c $(LIBRARY_SRC) -I$(INCLUDE_PATH)
+# GPU executable target (not implemented yet)
+# $(GPU): $(GPU).cpp $(LIBRARY_OBJ)
+#	$(CC) $(CFLAGS) -o $(OBJDIR)/$(GPU) $(GPU).cpp -I$(INCLUDE_PATH) -L$(BUILD_PATH) -lgalign 
 
-$(LIBRARY_NAME): $(LIBRARY_OBJ)
-	$(CC) $(CFLAGS) -shared -o $(LIBRARY_PATH)/lib$(LIBRARY_NAME).so $(LIBRARY_OBJ)
+# Compile source files into object files in the build directory
+$(OBJDIR)/%.o: lib/%.cpp
+	$(CC) $(CFLAGS) -fPIC -c $< -I$(INCLUDE_PATH) -o $@
 
+# Create shared library from object files
+$(SHARED_OBJECT): $(LIBRARY_OBJ)
+	$(CC) $(CFLAGS) -shared -o $@ $^
+
+# Clean up generated files
 clean:
-	rm -f $(LIBRARY_PATH)/lib$(LIBRARY_NAME).so $(SINGLE) $(LIBRARY_OBJ)
+	rm -rf $(BUILD_PATH)/lib$(LIBRARY_NAME).so $(SINGLE) $(OBJDIR)
+
+.PHONY: all clean
