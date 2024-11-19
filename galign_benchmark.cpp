@@ -2,8 +2,8 @@
 #include "include/cmd.hpp"
 #include "include/parser.hpp"
 
-// Comment out to disable debugging
-#define ENABLE_DEBUG 
+// Set to 0 to disable debugging
+#define DDEBUG 1
 
 int main(int argc, char *argv[]) {
     CommandLineArgs args(argc, argv);
@@ -11,7 +11,7 @@ int main(int argc, char *argv[]) {
         std::exit(EXIT_FAILURE);
     }
 
-    #ifdef ENABLE_DEBUG
+    #if (DDEBUG != 0)
         args.print();
     #endif
 

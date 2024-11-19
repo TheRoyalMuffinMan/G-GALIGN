@@ -1,3 +1,4 @@
+#include "globals.hpp"
 #include "cmd.hpp"
 #include <iostream>
 #include <getopt.h>
@@ -22,7 +23,21 @@ void CommandLineArgs::usage() const {
               << "  -h, --help                      Show this help message and exit\n";
 }
 
+void CommandLineArgs::print() const {
+    std::cout << "Parsed Arguments:" << std::endl;
+    std::cout << "Query: " << this->query << std::endl;
+    std::cout << "Reference: " << this->reference << std::endl;
+    std::cout << "Output: " << this->output << std::endl;
+    std::cout << "Gap Penalty: " << this->gap_penalty << std::endl;
+    std::cout << "Mismatch Penalty: " << this->mismatch_penalty << std::endl;
+    std::cout << "Match Score: " << this->match_score << std::endl;
+    std::cout << "Ignore Outer Gaps: " << (this->ignore_outer_gaps ? "true" : "false") << std::endl;
+}
+
 int CommandLineArgs::parse() {
+    // Setup flags and struct for arguments
+    int query_flag = 0, reference_flag = 0, output_flag = 0;
+    int gap_flag = 0, mismatch_flag = 0, match_flag = 0;
     struct option long_options[] = {
         {"query", required_argument, NULL, 'q'},
         {"reference", required_argument, NULL, 'r'},
@@ -34,49 +49,79 @@ int CommandLineArgs::parse() {
         {"help", no_argument, NULL, 'h'}
     };
 
+    // Set defaults for optional arguments
+    this->ignore_outer_gaps = 0;
+
     char ch;
-    while ((ch = getopt_long(this->argc, this->argv, "q:r:o:g:p:m:i:h", long_options, NULL))) {
+    while ((ch = getopt_long(this->argc, this->argv, "q:r:o:g:p:m:i:h", long_options, NULL)) != -1) {
         switch (ch) {
             case 'q':
                 this->query = std::string(optarg);
+                query_flag = 1;
                 break;
             case 'r':
                 this->reference = std::string(optarg);
+                reference_flag = 1;
                 break;
             case 'o':
                 this->output = std::string(optarg);
+                output_flag = 1;
                 break;
             case 'g':
                 this->gap_penalty = std::stoi(optarg);
+                gap_flag = 1;
                 break;
             case 'p':
                 this->mismatch_penalty = std::stoi(optarg);
+                mismatch_flag = 1;
                 break;
             case 'm':
                 this->match_score = std::stoi(optarg);
+                match_flag = 1;
                 break;
             case 'i':
                 this->ignore_outer_gaps = !!std::stoi(optarg);
                 break;
             case 'h':
-                usage();
+                goto error;
             default:
                 std::cout << "Invalid option or missing argument" << std::endl;
-                usage();
-                return 1;
+                goto error;
         }
     }
 
-    return 0;
-}
+    if (query_flag == 0) {
+        std::cout << "No query file passed in" << std::endl;
+        goto error;
+    }
 
-void CommandLineArgs::print() const {
-    std::cout << "Parsed Arguments:" << std::endl;
-    std::cout << "Query: " << this->query << std::endl;
-    std::cout << "Reference: " << this->reference << std::endl;
-    std::cout << "Output: " << this->output << std::endl;
-    std::cout << "Gap Penalty: " << this->gap_penalty << std::endl;
-    std::cout << "Mismatch Penalty: " << this->mismatch_penalty << std::endl;
-    std::cout << "Match Score: " << this->match_score << std::endl;
-    std::cout << "Ignore Outer Gaps: " << (this->ignore_outer_gaps ? "true" : "false") << std::endl;
+    if (reference_flag == 0) {
+        std:: cout << "No reference file passed in" << std::endl;
+        goto error;
+    }
+
+    if (output_flag == 0) {
+        std::cout << "No output file passed in... defaulting to output.txt as filename" << std::endl;
+        this->output = DEFAULT_OUTPUT_FILE;
+    }
+
+    if (gap_flag == 0) {
+        std::cout << "No gap penalty passed in" << std::endl;
+        goto error;
+    }
+
+    if (mismatch_flag == 0) {
+        std::cout << "No mismatch penalty passed in" << std::endl;
+        goto error;
+    }
+
+    if (match_flag == 0) {
+        std::cout << "No match score passed in" << std::endl;
+        goto error;
+    }
+
+    return 0;
+error:
+    usage();
+    return 1;
 }
