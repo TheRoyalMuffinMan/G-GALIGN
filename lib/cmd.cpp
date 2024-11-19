@@ -69,3 +69,14 @@ int CommandLineArgs::parse() {
 
     return 0;
 }
+
+void CommandLineArgs::print() const {
+    std::cout << "Parsed Arguments:" << std::endl;
+    std::cout << "Query: " << this->query << std::endl;
+    std::cout << "Reference: " << this->reference << std::endl;
+    std::cout << "Output: " << this->output << std::endl;
+    std::cout << "Gap Penalty: " << this->gap_penalty << std::endl;
+    std::cout << "Mismatch Penalty: " << this->mismatch_penalty << std::endl;
+    std::cout << "Match Score: " << this->match_score << std::endl;
+    std::cout << "Ignore Outer Gaps: " << (this->ignore_outer_gaps ? "true" : "false") << std::endl;
+}

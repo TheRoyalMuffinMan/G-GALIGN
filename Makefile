@@ -20,15 +20,15 @@ all: $(SHARED_OBJECT) $(SINGLE) # $(MULTI) $(GPU)
 
 # Singlethreaded execution target
 $(SINGLE): $(SINGLE).cpp $(LIBRARY_OBJ)
-	$(CC) $(CFLAGS) -o $(OBJDIR)/$(SINGLE) $(SINGLE).cpp -I$(INCLUDE_PATH) -L$(BUILD_PATH) -lgalign 
+	$(CC) $(CFLAGS) -o $(SINGLE) $(SINGLE).cpp -I$(INCLUDE_PATH) -L$(BUILD_PATH) -lgalign 
 
 # Multithreaded executable target (not implemented yet)
 # $(MULTI): $(MULTI).cpp $(LIBRARY_OBJ)
-#	$(CC) $(CFLAGS) -o $(OBJDIR)/$(MULTI) $(MULTI).cpp -I$(INCLUDE_PATH) -L$(BUILD_PATH) -lgalign 
+#	$(CC) $(CFLAGS) -o $(MULTI) $(MULTI).cpp -I$(INCLUDE_PATH) -L$(BUILD_PATH) -lgalign 
 
 # GPU executable target (not implemented yet)
 # $(GPU): $(GPU).cpp $(LIBRARY_OBJ)
-#	$(CC) $(CFLAGS) -o $(OBJDIR)/$(GPU) $(GPU).cpp -I$(INCLUDE_PATH) -L$(BUILD_PATH) -lgalign 
+#	$(CC) $(CFLAGS) -o $(GPU) $(GPU).cpp -I$(INCLUDE_PATH) -L$(BUILD_PATH) -lgalign 
 
 # Compile source files into object files in the build directory
 $(OBJDIR)/%.o: lib/%.cpp

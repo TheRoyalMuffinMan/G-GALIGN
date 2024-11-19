@@ -9,6 +9,7 @@ class CommandLineArgs {
         CommandLineArgs(int argc, char* argv[]);
         ~CommandLineArgs();
         void usage() const;
+        void print() const;
         int parse();
     
         std::string query;
