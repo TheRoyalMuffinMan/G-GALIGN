@@ -21,6 +21,15 @@ all: $(SHARED_OBJECT) $(SINGLE) $(MULTI) $(GPU)
 # Library target
 lib: $(SHARED_OBJECT)
 
+# Library and Singlethreaded target
+single: lib $(SINGLE)
+
+# Library and Multithreaded target
+multi: lib $(MULTI)
+
+# Library and GPU target
+gpu: lib $(GPU)
+
 # Compile source files into object files in the build directory
 $(OBJDIR)/%.o: lib/%.cpp
 	$(CC) $(CFLAGS) -fPIC -c $< -I$(INCLUDE_PATH) -o $@
