@@ -32,6 +32,7 @@ void CommandLineArgs::print() const {
     std::cout << "Mismatch Penalty: " << this->mismatch_penalty << std::endl;
     std::cout << "Match Score: " << this->match_score << std::endl;
     std::cout << "Ignore Outer Gaps: " << (this->ignore_outer_gaps ? "true" : "false") << std::endl;
+    std::cout << std::endl;
 }
 
 int CommandLineArgs::parse() {

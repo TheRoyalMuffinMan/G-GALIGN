@@ -1,6 +1,7 @@
 #include <iostream>
 #include "include/cmd.hpp"
 #include "include/fasta.hpp"
+#include "include/globals.hpp"
 
 // Set to 0 to disable debugging
 #define DDEBUG 1

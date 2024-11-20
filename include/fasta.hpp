@@ -2,7 +2,12 @@
 #define FASTA_H
 
 #include <string>
-#include <unordered_map>
+#include <vector>
+
+typedef struct {
+    std::string id;
+    std::string sequence;
+} Gene;
 
 class Fasta {
     public:
@@ -10,8 +15,8 @@ class Fasta {
         ~Fasta();
         void print() const;
         int read();
-
-        std::unordered_map<std::string, std::string> genes;
+        
+        std::vector<Gene> genes;
     private:
         std::string path;
 };

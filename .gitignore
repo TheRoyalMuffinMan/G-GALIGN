@@ -7,6 +7,9 @@
 # Unignore all dirs
 !*/
 
+# Ignore .txt (results file)
+*.txt
+
 .vscode
 
 # Prerequisites

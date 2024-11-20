@@ -12,19 +12,20 @@ Fasta::~Fasta() {
 }
 
 void Fasta::print() const {
-    std::cout << "Fasta:" << std::endl;
+    std::cout << "FASTA:" << std::endl;
     std::cout << "File: " << this->path << std::endl;
-    for (auto it = this->genes.begin(); it != this->genes.end(); it++) {
-        std::cout << it->first << ": " << it->second << std::endl;
+    for (size_t i = 0; i < genes.size(); i++) {
+        std::cout << genes[i].id << ": " << genes[i].sequence << std::endl;
     }
+    std::cout << std::endl;
 }
 
 int Fasta::read() {
     std::ifstream file(this->path);
     std::string line;
 
-    if (!file.good()) {
-        std::cerr << "Error: Incorrect path or file doesn't exist" << std::endl;
+    if (!file.is_open()) {
+        std::cerr << "Error: Couldn't open or create file" << std::endl;
         return 1;
     }
 
@@ -45,12 +46,13 @@ int Fasta::read() {
                 std::cerr << "Error: EOF before matching current metadata" << std::endl;
                 return 1;
             }
-            this->genes[metadata] = sequence;
+            this->genes.push_back({metadata, sequence});
         } else {
             std::cerr << "Error: Doesn't match FASTA file format" << std::endl;
             return 1;
         }
     }
 
+    file.close();
     return 0;
 }
