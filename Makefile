@@ -18,6 +18,12 @@ $(shell mkdir -p $(OBJDIR) $(BUILD_PATH))
 # Default target
 all: $(SHARED_OBJECT) $(SINGLE) $(MULTI) $(GPU)
 
+# Individual targets
+shared_object: $(SHARED_OBJECT)
+single: $(SINGLE)
+multi: $(MULTI)
+gpu: $(GPU)
+
 # Singlethreaded execution target
 $(SINGLE): $(SINGLE).cpp $(LIBRARY_OBJ)
 	$(CC) $(CFLAGS) -o $(SINGLE) $(SINGLE).cpp -I$(INCLUDE_PATH) -L$(BUILD_PATH) -lgalign 
@@ -42,4 +48,4 @@ $(SHARED_OBJECT): $(LIBRARY_OBJ)
 clean:
 	rm -rf $(BUILD_PATH)/lib$(LIBRARY_NAME).so $(SINGLE) $(MULTI) $(GPU) $(OBJDIR)
 
-.PHONY: all clean
+.PHONY: all shared_object single multi gpu clean
