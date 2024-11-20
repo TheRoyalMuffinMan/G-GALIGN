@@ -8,8 +8,8 @@ OBJDIR = build
 INCLUDE_PATH = ./include
 BUILD_PATH = ./build   # Compiled files will be placed here
 LIBRARY_NAME = galign
-LIBRARY_SRC = lib/cmd.cpp lib/parser.cpp
-LIBRARY_OBJ = $(OBJDIR)/cmd.o $(OBJDIR)/parser.o
+LIBRARY_SRC = lib/cmd.cpp lib/fasta.cpp
+LIBRARY_OBJ = $(OBJDIR)/cmd.o $(OBJDIR)/fasta.o
 SHARED_OBJECT = $(OBJDIR)/lib$(LIBRARY_NAME).so
 
 # Create build directories if they don't exist

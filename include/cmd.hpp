@@ -1,7 +1,6 @@
 #ifndef CMD_H
 #define CMD_H
 
-#include <iostream>
 #include <string>
 
 class CommandLineArgs {
@@ -19,7 +18,6 @@ class CommandLineArgs {
         int mismatch_penalty;
         int match_score;
         bool ignore_outer_gaps;
-        
     private:
         int argc;
         char** argv;

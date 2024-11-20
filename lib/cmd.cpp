@@ -1,7 +1,7 @@
-#include "globals.hpp"
-#include "cmd.hpp"
 #include <iostream>
 #include <getopt.h>
+#include "globals.hpp"
+#include "cmd.hpp"
 
 CommandLineArgs::CommandLineArgs(int argc, char* argv[]) {
     this->argc = argc;
@@ -24,7 +24,7 @@ void CommandLineArgs::usage() const {
 }
 
 void CommandLineArgs::print() const {
-    std::cout << "Parsed Arguments:" << std::endl;
+    std::cout << "Command Line Arguments:" << std::endl;
     std::cout << "Query: " << this->query << std::endl;
     std::cout << "Reference: " << this->reference << std::endl;
     std::cout << "Output: " << this->output << std::endl;
@@ -35,7 +35,7 @@ void CommandLineArgs::print() const {
 }
 
 int CommandLineArgs::parse() {
-    // Setup flags and struct for arguments
+    // Setup flags, struct for arguments, and argument flag character
     int query_flag = 0, reference_flag = 0, output_flag = 0;
     int gap_flag = 0, mismatch_flag = 0, match_flag = 0;
     struct option long_options[] = {
@@ -48,11 +48,11 @@ int CommandLineArgs::parse() {
         {"ignore_outer_gaps", optional_argument, 0, 'i'},
         {"help", no_argument, NULL, 'h'}
     };
+    char ch;
 
     // Set defaults for optional arguments
     this->ignore_outer_gaps = 0;
 
-    char ch;
     while ((ch = getopt_long(this->argc, this->argv, "q:r:o:g:p:m:i:h", long_options, NULL)) != -1) {
         switch (ch) {
             case 'q':
@@ -91,32 +91,32 @@ int CommandLineArgs::parse() {
     }
 
     if (query_flag == 0) {
-        std::cout << "No query file passed in" << std::endl;
+        std::cerr << "No query file passed in" << std::endl;
         goto error;
     }
 
     if (reference_flag == 0) {
-        std:: cout << "No reference file passed in" << std::endl;
+        std::cerr << "No reference file passed in" << std::endl;
         goto error;
     }
 
     if (output_flag == 0) {
-        std::cout << "No output file passed in... defaulting to output.txt as filename" << std::endl;
+        std::cerr << "No output file passed in... defaulting to output.txt as filename" << std::endl;
         this->output = DEFAULT_OUTPUT_FILE;
     }
 
     if (gap_flag == 0) {
-        std::cout << "No gap penalty passed in" << std::endl;
+        std::cerr << "No gap penalty passed in" << std::endl;
         goto error;
     }
 
     if (mismatch_flag == 0) {
-        std::cout << "No mismatch penalty passed in" << std::endl;
+        std::cerr << "No mismatch penalty passed in" << std::endl;
         goto error;
     }
 
     if (match_flag == 0) {
-        std::cout << "No match score passed in" << std::endl;
+        std::cerr << "No match score passed in" << std::endl;
         goto error;
     }
 
