@@ -91,32 +91,32 @@ int CommandLineArgs::parse() {
     }
 
     if (query_flag == 0) {
-        std::cerr << "No query file passed in" << std::endl;
+        std::cerr << "Error: No query file passed in" << std::endl;
         goto error;
     }
 
     if (reference_flag == 0) {
-        std::cerr << "No reference file passed in" << std::endl;
+        std::cerr << "Error: No reference file passed in" << std::endl;
         goto error;
     }
 
     if (output_flag == 0) {
-        std::cerr << "No output file passed in... defaulting to output.txt as filename" << std::endl;
+        std::cerr << "Warning: No output file passed in... defaulting to output.txt as filename" << std::endl;
         this->output = DEFAULT_OUTPUT_FILE;
     }
 
     if (gap_flag == 0) {
-        std::cerr << "No gap penalty passed in" << std::endl;
+        std::cerr << "Error: No gap penalty passed in" << std::endl;
         goto error;
     }
 
     if (mismatch_flag == 0) {
-        std::cerr << "No mismatch penalty passed in" << std::endl;
+        std::cerr << "Error: No mismatch penalty passed in" << std::endl;
         goto error;
     }
 
     if (match_flag == 0) {
-        std::cerr << "No match score passed in" << std::endl;
+        std::cerr << "Error: No match score passed in" << std::endl;
         goto error;
     }
 
