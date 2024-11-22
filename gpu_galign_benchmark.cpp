@@ -24,19 +24,18 @@ Result needleman_wunsch(std::string reference, std::string query,
                         int gap_penalty, int mismatch_penalty, 
                         int match_score, int ignore_outer_gaps) {
     Result res = {0};
-    int *deviceDPTable = nullptr;
+    int *device_dp_table = nullptr;
     int m = query.size() + 1, n = reference.size() + 1;
-    int deviceCount;
-    int deviceID;
+    int device_count;
 
     // Get GPU counts
-    checkCudaErrors(cudaGetDeviceCount(&devicesCount));
+    checkCudaErrors(cudaGetDeviceCount(&device_count));
 
     // Utilize single GPU for processing
     checkCudaErrors(cudaSetDevice(DEFAULT_GPU_ID));
 
     // Allocate memory on the GPU for the DP matrix (might need to tile this)
-    checkCudaErrors(cudaMalloc(&deviceDPTable, sizeof(int) * m * n));
+    checkCudaErrors(cudaMalloc(&device_dp_table, sizeof(int) * m * n));
 
 
 
