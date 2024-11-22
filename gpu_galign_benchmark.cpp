@@ -6,6 +6,43 @@
 // Set to 0 to disable debugging
 #define DDEBUG 1
 
+// CUDA Helper Directives
+#define checkCudaErrors(call)                                           \
+    do {                                                                \
+        cudaError_t err = call;                                         \
+        if (err != cudaSuccess) {                                       \
+            std::cerr << "CUDA error at " << __FILE__ << " "            \
+                      << __LINE__ << ": " << cudaGetErrorString(err)    \
+                      << std::endl;                                     \
+            std::exit(EXIT_FAILURE);                                    \
+        }                                                               \
+    } while (0)
+
+
+// 1,073,741,824
+Result needleman_wunsch(std::string reference, std::string query, 
+                        int gap_penalty, int mismatch_penalty, 
+                        int match_score, int ignore_outer_gaps) {
+    Result res = {0};
+    int *deviceDPTable = nullptr;
+    int m = query.size() + 1, n = reference.size() + 1;
+    int deviceCount;
+    int deviceID;
+
+    // Get GPU counts
+    checkCudaErrors(cudaGetDeviceCount(&devicesCount));
+
+    // Utilize single GPU for processing
+    checkCudaErrors(cudaSetDevice(DEFAULT_GPU_ID));
+
+    // Allocate memory on the GPU for the DP matrix (might need to tile this)
+    checkCudaErrors(cudaMalloc(&deviceDPTable, sizeof(int) * m * n));
+
+
+
+    return res;
+}
+
 int main(int argc, char *argv[]) {
     CommandLineArgs args(argc, argv);
     if (args.parse() != 0) {

@@ -3,8 +3,8 @@
 #include "globals.hpp"
 
 int write_results(int score, std::string filename, 
-                 std::string reference_id, std::string reference, 
-                 std::string alignment, std::string query_id, std::string query) {               
+                  std::string reference_id, std::string reference, 
+                  std::string alignment, std::string query_id, std::string query) {               
     std::ofstream file(filename);
 
     if (!file.is_open()) {

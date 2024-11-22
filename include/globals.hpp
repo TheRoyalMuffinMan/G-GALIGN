@@ -4,6 +4,14 @@
 #include <string>
 
 #define DEFAULT_OUTPUT_FILE "output.txt"
+#define DEFAULT_GPU_ID 0
+
+typedef struct {
+    int score;
+    std::string updated_ref;
+    std::string alignment;
+    std::string updated_query;
+} Result;
 
 int write_results(int score, std::string filename, 
                   std::string reference_id, std::string reference, 

@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
     Gene query = query_fasta.genes[0];
     Gene reference = reference_fasta.genes[0];
 
-
+    
 
     write_results(10, args.output, reference.id, reference.sequence, "", query.id, query.sequence);
 }
