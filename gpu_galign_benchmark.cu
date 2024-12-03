@@ -59,7 +59,7 @@ Result needleman_wunsch(std::string reference, std::string query,
                         int gap_penalty, int mismatch_penalty, 
                         int match_score, int ignore_outer_gaps) {
     Result res = {0};
-    int64_t m = query.size() + 1, n = reference.size() + 10000;
+    int64_t m = query.size() + 1, n = reference.size() + 1;
     size_t data_size = sizeof(int64_t) * m * n;
     int device_count;
     int64_t *device_dp_table = nullptr;
