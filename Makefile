@@ -1,6 +1,9 @@
 # Compiler and flags
 CC = g++
+NVCC = nvcc
 CFLAGS = -Wall -g -pthread
+CUDAFLAGS = -g
+
 SINGLE = galign_benchmark
 MULTI = multi_galign_benchmark
 GPU = gpu_galign_benchmark
@@ -47,8 +50,8 @@ $(MULTI): $(MULTI).cpp $(LIBRARY_OBJ)
 	$(CC) $(CFLAGS) -o $(MULTI) $(MULTI).cpp -I$(INCLUDE_PATH) -L$(BUILD_PATH) -lgalign 
 
 # GPU execution target
-$(GPU): $(GPU).cpp $(LIBRARY_OBJ)
-	$(CC) $(CFLAGS) -o $(GPU) $(GPU).cpp -I$(INCLUDE_PATH) -L$(BUILD_PATH) -lgalign 
+$(GPU): $(GPU).cu $(LIBRARY_OBJ)
+	$(NVCC) $(CUDAFLAGS) -o $(GPU) $(GPU).cu -I$(INCLUDE_PATH) -L$(BUILD_PATH) -lgalign 
 
 # Clean up generated files
 clean:
