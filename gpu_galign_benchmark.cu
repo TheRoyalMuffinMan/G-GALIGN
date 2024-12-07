@@ -34,6 +34,7 @@ void print_matrix(int64_t *matrix, int64_t m, int64_t n) {
     std::cout << "Non-zero entries: " << count << std::endl;
 }
 
+// Helps compute the 1-D position using 2-D indexing for the matrix
 __host__ __device__ int get_position(int64_t row, int64_t col, int64_t num_cols) {
     return row * num_cols + col;
 }
@@ -45,17 +46,11 @@ __global__ void init_gaps(int64_t *dp_table, int64_t m, int64_t n, int gap_penal
     if (idx < m) {
         int64_t row_position = idx * n;
         dp_table[row_position] = gap_penalty * idx;
-        #if (DDEBUG != 0)
-            printf("Initializing first column at position %lld (row %d, col 0)\n", row_position, idx);
-        #endif
     }
 
     // Initializes the first row for all columns (dp_table[idx])
     if (idx < n) {
         dp_table[idx] = gap_penalty * idx;
-        #if (DDEBUG != 0)
-            printf("Initializing first row at position %d (row 0, col %d)\n", idx, idx);
-        #endif
     }
 }
 
@@ -69,19 +64,9 @@ __global__ void solve_anti_diagonals(char *query, char *reference,
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     int64_t new_row = start_row - idx, new_col = start_col + idx;
     int64_t position = get_position(new_row, new_col, n);
-    #if (DDEBUG != 0)
-        printf("start_row: %lld, start_col: %lld, idx: %d, new_row: %lld, new_col: %lld, position: %lld\n", start_row, start_col, idx, new_row, new_col, position);
-    #endif
 
-    if (position == 7647 || (new_row == 2 && new_col == 1)) {
-        printf("m: %lld, n: %lld\n", m, n);
-        printf("start_row: %lld, start_col: %lld, end_row: %lld, end_col: %lld, threadidx: %d\n", 
-            start_row, start_col, end_row, end_col, idx);
-        printf("new_row: %lld, new_col: %lld, position: %lld\n", new_row, new_col, position);    
-    }
-
-    // Valid index
-    if (position < data_size && new_row > end_row && new_col < end_col) {
+    // Checks if the thread is within range and we aren't at the end position
+    if (position < data_size && new_row >= end_row && new_col < end_col) {
         int64_t diagonal = 0, top = 0, left = 0;
         if (query[new_row - 1] == reference[new_col - 1]) {
             diagonal = dp_table[get_position(new_row - 1, new_col - 1, n)] + match_score;
@@ -92,18 +77,7 @@ __global__ void solve_anti_diagonals(char *query, char *reference,
         top = dp_table[get_position(new_row - 1, new_col, n)] + gap_penalty;
         left = dp_table[get_position(new_row, new_col - 1, n)] + gap_penalty;
 
-        int64_t max_value = diagonal;  // Start with the diagonal value
-
-        if (top > max_value) {
-            max_value = top;  // Update max_value if top is greater
-        }
-
-        if (left > max_value) {
-            max_value = left;  // Update max_value if left is greater
-        }
-
-        // Finally assign the maximum value to dp_table[position]
-        dp_table[position] = max_value;
+        dp_table[position] = max(diagonal, max(top, left));
     }
 }
 
@@ -112,13 +86,13 @@ Result needleman_wunsch(std::string reference, std::string query,
                         int match_score, int ignore_outer_gaps) {
     Result res = {.score = 0, .updated_query = "", .alignment = "", .updated_ref = ""};
     int64_t m = query.size() + 1, n = reference.size() + 1;
-    size_t data_size = sizeof(int64_t) * m * n;
     int64_t *device_dp_table = nullptr;
     int64_t *host_dp_table = new int64_t[m * n];
+    int64_t anti_diagonals = m + n - 3; // Discount 2 gap (row and column)
+    size_t data_size = sizeof(int64_t) * m * n;
     char *device_query = nullptr, *device_reference = nullptr;
     int device_count;
 
-    // auto start = std::chrono::high_resolution_clock::now();
     // Get GPU counts
     checkCudaErrors(cudaGetDeviceCount(&device_count));
 
@@ -137,80 +111,78 @@ Result needleman_wunsch(std::string reference, std::string query,
     checkCudaErrors(cudaMemcpy(device_reference, reference.c_str(), reference.size(), cudaMemcpyHostToDevice));
 
     // Initialize the gaps of the row and column
-    int64_t nthreads = 256;
-    int64_t nblocks = (m + n + nthreads - 1) / nthreads;
+    auto start = std::chrono::high_resolution_clock::now();
+    int64_t nthreads = DEFAULT_THREAD_SIZE;
+    int64_t nblocks = (std::max(m, n) + nthreads - 1) / nthreads;
     #if (DDEBUG != 0)
         std::cout << "(nThreads = " << nthreads << ", nBlocks = " << nblocks << ")" << std::endl;
         std::cout << "(m = " << m << ", n = " << n << ")" << std::endl;
     #endif
-    auto start = std::chrono::high_resolution_clock::now();
     init_gaps<<<nthreads, nblocks>>>(device_dp_table, m, n, gap_penalty);
+
+    /****   Begin needleman wunsch anti-diagonal approach on the GPU   ****/
+    /***  We will spawn out a kernel invocation for each anti-diagonal  ***/
+    int64_t start_row = 0, start_col = 1;
+    int64_t end_row = 0, end_col = 1;
+    for (int64_t diag = 0; diag < anti_diagonals; diag++) {
+        
+        // Computes the start position and end position of the given
+        // anti-diagonal in order to process it on the GPU, ex:
+        /*
+         *         e   e   e   e
+         *         V   V   V   V
+         * 0   0   0   0   0   0
+         * 6 s>1   2   3   4   5 < e
+         * 0 s>1   2   3   4   5 < e
+         * 0 s>1   2   3   4   5 < e
+         * 0 s>1   2   3   4   5 < e
+         * 0 s>1   2   3   4   5 < e
+         *         ^   ^   ^   ^
+         *         s   s   s   s
+        */
+        int64_t cells = 0;
+        if (start_row < m - 1) {
+            start_row++;
+            if (end_col + 1 < n) {
+                end_col++, cells = start_row - end_row;
+            } else {
+                end_col = n, end_row++, cells = end_col - start_col;
+            }
+        } else {
+            start_col++;
+            if (end_col + 1 < n) {
+                end_col++, cells = start_row - end_row;
+            } else {
+                end_col = n, end_row++, cells = end_col - start_col;
+            }
+        }
+
+        // Spawn out threads based on distance and solve current anti-diagonal
+        // Uses the number of cells (distance between start and end positions) to determine
+        // number of threads and blocks
+        int64_t nthreads = std::min(static_cast<int64_t>(DEFAULT_THREAD_SIZE), cells);
+        int64_t nblocks = (cells + nthreads - 1) / nthreads;
+        solve_anti_diagonals<<<nthreads, nblocks>>>(
+            device_query, device_reference,
+            device_dp_table, data_size,
+            m, n, 
+            start_row, start_col, 
+            end_row, end_col,
+            gap_penalty, mismatch_penalty, match_score
+        );
+    }
+
+    // Insure all kernels have finished executing
+    cudaDeviceSynchronize();
+
+    // Get time taken to compute matrix (include initialize gaps and compute DP)
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = end - start;
     std::cout << "Execution time: " 
               << duration.count() << " seconds" << std::endl;  // Convert seconds to microseconds
-
-    /** Begin needleman wunsch anti-diagonal approach on the GPU **/
-    /* We will spawn out a kernel invocation for each anti-diagonal */
-
-    // Compute the first half
-    int64_t start_col = 1, end_row = 0;
-    int64_t end_col = 2;
-    for (int64_t start_row = 1; start_row < m; start_row++) {
-        // Initialization
-        int64_t distance = std::min(start_row, end_col);
-
-        // Setting up number of threads and block size
-        int64_t nthreads = std::min(static_cast<int64_t>(256), distance);
-        int64_t nblocks = (distance + nthreads - 1) / nthreads;
-        #if (DDEBUG != 0)
-            std::cout << "(nThreads = " << nthreads << ", nBlocks = " << nblocks << ")" << std::endl;
-            std::cout << "(m = " << m << ", n = " << n << ")" << std::endl;
-        #endif
-        solve_anti_diagonals<<<nthreads, nblocks>>>(
-            device_query, device_reference,
-            device_dp_table, data_size,
-            m, n, 
-            start_row, start_col, 
-            end_row, end_col,
-            gap_penalty, mismatch_penalty, match_score
-        );
-        end_col = std::min(end_col + 1, n);
-    }
-
-    // Compute the second half
-    int64_t start_row = m - 1;
-    end_col = n;
-    for (start_col = 2; start_col < n; start_col++) {
-        // Initialization
-        end_row = start_col;
-        int64_t distance = n - start_col;
-
-        // Setting up number of threads and block size
-        int64_t nthreads = std::min(static_cast<int64_t>(256), distance);
-        int64_t nblocks = (distance + nthreads - 1) / nthreads;
-        #if (DDEBUG != 0)
-            std::cout << "(nThreads = " << nthreads << ", nBlocks = " << nblocks << ")" << std::endl;
-            std::cout << "(m = " << m << ", n = " << n << ")" << std::endl;
-        #endif
-        solve_anti_diagonals<<<nthreads, nblocks>>>(
-            device_query, device_reference,
-            device_dp_table, data_size,
-            m, n, 
-            start_row, start_col, 
-            end_row, end_col,
-            gap_penalty, mismatch_penalty, match_score
-        );
-    }
-
+    
     // Copy the result matrix from device to host
     checkCudaErrors(cudaMemcpy(host_dp_table, device_dp_table, data_size, cudaMemcpyDeviceToHost));
-
-    // Get time taken to compute matrix
-    // auto end = std::chrono::high_resolution_clock::now();
-    // std::chrono::duration<double> duration = end - start;
-    // std::cout << "Execution time: " 
-    //           << duration.count() << " seconds" << std::endl;  // Convert seconds to microseconds
 
     // Print the 2D matrix (from the host memory)
     #if (DDEBUG != 0)
@@ -280,6 +252,7 @@ Result needleman_wunsch(std::string reference, std::string query,
     // Free allocated host memory
     delete[] host_dp_table;
 
+    // Reverse the sequences for the output file
     std::reverse(res.updated_query.begin(), res.updated_query.end());
     std::reverse(res.alignment.begin(), res.alignment.end());
     std::reverse(res.updated_ref.begin(), res.updated_ref.end());

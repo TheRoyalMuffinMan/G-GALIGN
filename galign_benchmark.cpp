@@ -7,7 +7,7 @@
 #include "include/globals.hpp"
 
 // Set to 0 to disable debugging
-#define DDEBUG 1
+#define DDEBUG 0
 
 int main(int argc, char *argv[]) {
     CommandLineArgs args(argc, argv);
@@ -84,6 +84,8 @@ int main(int argc, char *argv[]) {
     matrixSym[0][0] = 'S';
     matrixDir[0][0] = '-';
 
+    // Start the timing Calculations
+    auto start = std::chrono::high_resolution_clock::now();
     // Init the first column and first row of the matrix, with increasing gap penalty values
     // Init the First Column
     for (int i = 0; i < queryL; i++) // Rows
@@ -124,8 +126,6 @@ int main(int argc, char *argv[]) {
     }
 
     // Calculate the Alignment Scores
-    // Start the timing Calculations
-    auto start = std::chrono::high_resolution_clock::now();
 
     // Loop over all matrix values starting at (1,1)
     for(int q = 1; q < queryL; q++)
@@ -202,10 +202,9 @@ int main(int argc, char *argv[]) {
 
     // End the Timing Calculations
     auto end = std::chrono::high_resolution_clock::now();
-    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-
-    // Print out the time taken
-    std::cout << "Executed Alignment Calculations in : " << time.count() << " milliseconds\n";
+    std::chrono::duration<double> duration = end - start;
+    std::cout << "Execution time: " 
+              << duration.count() << " seconds" << std::endl;  // Convert seconds to microseconds
 
     
     //####################################### ANALYZE RESULTS ########################################

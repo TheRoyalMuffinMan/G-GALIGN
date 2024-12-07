@@ -5,6 +5,7 @@
 
 #define DEFAULT_OUTPUT_FILE "output.txt"
 #define DEFAULT_GPU_ID 0
+#define DEFAULT_THREAD_SIZE 256
 
 typedef struct {
     int64_t score;
