@@ -48,6 +48,9 @@
 # Build Directories
 build
 
+# Ignore dump folder
+dump/
+
 # Ignore all executable files
 .galign_benchmark
 

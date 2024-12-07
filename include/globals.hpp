@@ -7,10 +7,10 @@
 #define DEFAULT_GPU_ID 0
 
 typedef struct {
-    int score;
-    std::string updated_ref;
-    std::string alignment;
+    int64_t score;
     std::string updated_query;
+    std::string alignment;
+    std::string updated_ref;
 } Result;
 
 int write_results(int score, std::string filename, 
