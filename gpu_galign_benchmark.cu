@@ -102,9 +102,10 @@ __global__ void build_traceback(char *query, char *reference,
         int32_t mismatch = dp_table[get_position(row - 1, col - 1, n)] + mismatch_penalty;
         int32_t top = dp_table[get_position(row - 1, col, n)] + gap_penalty;
         int32_t left = dp_table[get_position(row, col - 1, n)] + gap_penalty;
+        int32_t current = dp_table[get_position(row, col, n)];
 
         // Two sequences matched in this position
-        if (query[row - 1] == reference[col - 1] && match == dp_table[get_position(row, col, n)]) {
+        if (query[row - 1] == reference[col - 1] && match == current) {
             alignment[a_i++] = '|';
             updated_query[q_i++] = query[row - 1];
             updated_reference[r_i++] = reference[col - 1];
@@ -112,7 +113,7 @@ __global__ void build_traceback(char *query, char *reference,
             col = col - 1;
         } 
         // Two sequences mismatched in this position
-        else if (mismatch == dp_table[get_position(row, col, n)]) {
+        else if (mismatch == current) {
             alignment[a_i++] = 'x';
             updated_query[q_i++] = query[row - 1];
             updated_reference[r_i++] = reference[col - 1];
@@ -120,14 +121,14 @@ __global__ void build_traceback(char *query, char *reference,
             col = col - 1;
         } 
         // Came from top gap to get to this position
-        else if (top == dp_table[get_position(row, col, n)]) {
+        else if (top == current) {
             alignment[a_i++] = ' ';
             updated_query[q_i++] = query[row - 1];
             updated_reference[r_i++] = '_';
             row = row - 1;
         } 
         // Came from left gap to get to this position
-        else if (left == dp_table[get_position(row, col, n)]) {
+        else if (left == current) {
             alignment[a_i++] = ' ';
             updated_query[q_i++] = '_';
             updated_reference[r_i++] = reference[col - 1];
