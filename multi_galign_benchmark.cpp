@@ -9,8 +9,8 @@
 #include "include/globals.hpp"
 
 // Set to 0 to disable debugging
-#define DDEBUG 1
-#define nTHREADS 3 // CHANGE TO INCREASE MAX NUM THREADS / Matrix Sub-Blocks
+#define DDEBUG 0
+#define nTHREADS 128 // CHANGE TO INCREASE MAX NUM THREADS / Matrix Sub-Blocks
 
 // GLOBAL VALUES //
 // Global 2D Array For Alignment Scores & Their Directions & ACSII Symbol
@@ -113,16 +113,10 @@ void blockAlign(int startRow, int stopRow, int startCol, int stopCol)
                 maxSym = ' ';
             }
 
-            // Get the mutex lock
-            exclusive.lock();
-
             // Store the max score, and its corresponding direction and visualization symbol
             matrixValues[q][r] = maxScore;
             matrixDir[q][r] = maxDir;
             matrixSym[q][r] = maxSym;
-
-            // Release the mutex lock
-            exclusive.unlock();
         }
     }
 }
@@ -313,9 +307,7 @@ int main(int argc, char *argv[]) {
 
                 // Create a new Thread
                 //std::cout << "R : Itteration " << numThreads << "  New Block: " << existingBlocks[n].startCol << " Col End: " << existingBlocks[n].endCol << " Row Start: " << newStartRow << " Row End: " <<  newStopRow << "\n";
-                threadLock.lock(); // Get Lock
                 threadList[newBlockIndex-1] = std::thread (blockAlign, newStartRow, newStopRow, existingBlocks[n].startCol, existingBlocks[n].endCol);
-                threadLock.unlock(); // Release Lock
             }
 
             // COL //
@@ -359,9 +351,7 @@ int main(int argc, char *argv[]) {
 
                 // Create a new Thread
                 //std::cout << "C : Itteration " << numThreads << "  New Block: " << newStartCol << " Col End: " << newStopCol << " Row Start: " << existingBlocks[n].startRow << " Row Stop: " <<  existingBlocks[n].endRow << "\n";
-                threadLock.lock();
                 threadList[newBlockIndex-1] = std::thread (blockAlign, existingBlocks[n].startRow, existingBlocks[n].endRow, newStartCol, newStopCol);
-                threadLock.unlock();
             }
         }
 
@@ -443,9 +433,7 @@ int main(int argc, char *argv[]) {
 
                     // Create a new Thread
                     //std::cout << "RD : Itteration " << numThreads << "  New Block: " << existingBlocks[n].startCol << " Col End: " << existingBlocks[n].endCol << " Row Start: " << newStartRow << " Row End: " <<  newStopRow << "\n";
-                    threadLock.lock(); // Get Lock
                     threadList[newBlockIndex-1] = std::thread (blockAlign, newStartRow, newStopRow, existingBlocks[n].startCol, existingBlocks[n].endCol);
-                    threadLock.unlock(); // Release Lock
                 }
             }
 
