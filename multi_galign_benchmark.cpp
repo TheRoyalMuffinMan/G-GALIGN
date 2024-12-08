@@ -8,7 +8,7 @@
 
 // Set to 0 to disable debugging
 #define DDEBUG 1
-#define nTHREADS 4 // CHANGE TO INCREASE MAX NUM THREADS / Matrix Sub-Blocks
+#define nTHREADS 3 // CHANGE TO INCREASE MAX NUM THREADS / Matrix Sub-Blocks
 
 // Thread Block Class
 class threadBlock {
@@ -142,14 +142,16 @@ int main(int argc, char *argv[]) {
     // Calculate the Alignment Scores
     
     // Divide cols 1-m and rows 1-n into nThread number of sections each. (SKIP 0th row/col bc its already filled out with gap values)
-    int numRowsToAdd = queryL / nTHREADS;
-    int numColsToAdd = refL / nTHREADS;
+    int numRowsToAdd = queryL / (nTHREADS);
+    int numColsToAdd = refL / (nTHREADS);
 
     // The number of active threads
     int numThreads = 0;
 
     // List of the existing thread blocks
     threadBlock existingBlocks[nTHREADS];
+
+    std::cout << queryL << " Ref: " << refL << "\n";
 
     // Add new threads as we move along the anti diagonal sub blocks, 0,0  down to the max number of threads we will need to make (Biggest Diagonal)
     while (numThreads < nTHREADS)
@@ -196,14 +198,14 @@ int main(int argc, char *argv[]) {
                 // Save the Block
                 newBlocks[newBlockIndex].startCol = existingBlocks[n].startCol;
                 newBlocks[newBlockIndex].endCol = existingBlocks[n].endCol;
-                newBlocks[newBlockIndex].startRow = newStartRow;
+                newBlocks[newBlockIndex].startRow = newStartRow + 1;
                 newBlocks[newBlockIndex].endRow = newStopRow;
                 newBlockIndex++;
 
                 // Get the Row, Col, Reference Segment, & Sequence Segment
 
                 // Create a new Thread
-                std::cout << "Itteration " << numThreads << "  New Block: " << existingBlocks[n].startCol << " Col End: " << existingBlocks[n].endCol << " Row Start: " << newStartRow << " Row End: " <<  newStopRow << "\n";
+                std::cout << "R : Itteration " << numThreads << "  New Block: " << existingBlocks[n].startCol << " Col End: " << existingBlocks[n].endCol << " Row Start: " << newStartRow << " Row End: " <<  newStopRow << "\n";
 
             }
 
@@ -240,7 +242,7 @@ int main(int argc, char *argv[]) {
                 }
 
                 // Save the Block
-                newBlocks[newBlockIndex].startCol = newStartCol;
+                newBlocks[newBlockIndex].startCol = newStartCol + 1;
                 newBlocks[newBlockIndex].endCol = newStopCol;
                 newBlocks[newBlockIndex].startRow = existingBlocks[n].startRow;
                 newBlocks[newBlockIndex].endRow = existingBlocks[n].endRow;
@@ -249,7 +251,7 @@ int main(int argc, char *argv[]) {
                 // Get the Row, Col, Reference Segment, & Sequence Segment
 
                 // Create a new Thread
-                std::cout << "Itteration " << numThreads << "  New Block: " << newStartCol << " Col End: " << newStopCol << " Row Start: " << existingBlocks[n].startRow << " Row Stop: " <<  existingBlocks[n].endRow << "\n";
+                std::cout << "C : Itteration " << numThreads << "  New Block: " << newStartCol << " Col End: " << newStopCol << " Row Start: " << existingBlocks[n].startRow << " Row Stop: " <<  existingBlocks[n].endRow << "\n";
             }
         }
 
@@ -257,15 +259,15 @@ int main(int argc, char *argv[]) {
         if (numThreads == 0)
         {
             // Add the block to the list of complete blocks
-            newBlocks[0].startCol = numColsToAdd;
+            newBlocks[0].startCol = 1;
             newBlocks[0].startRow = 1;
-            newBlocks[0].endCol = numRowsToAdd;
-            newBlocks[0].endRow = 1;
+            newBlocks[0].endCol = numColsToAdd;
+            newBlocks[0].endRow = numRowsToAdd;
 
             // Get the Row, Col, Reference Segment, & Sequence Segment
 
             // Create the thread
-
+            std::cout << " Num Col " << numColsToAdd << " Num Rows " << numRowsToAdd << "\n";
         }
 
         // Increase the thread count by 1 
