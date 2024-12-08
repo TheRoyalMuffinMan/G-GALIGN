@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
     Gene query = query_fasta.genes[0];
     Gene reference = reference_fasta.genes[0];
 
-    write_results(10, args.output, reference.id, reference.sequence, "", query.id, query.sequence);
+    auto memory_start = std::chrono::high_resolution_clock::now();
 
     // Get the arguments
     std::string output_file = args.output;
@@ -344,6 +344,11 @@ int main(int argc, char *argv[]) {
             indexR = indexR - 1;        
         }
     }
+
+    auto memory_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> memory_duration = memory_end - memory_start;
+    std::cout << "Execution time: " 
+              << memory_duration.count() << " seconds" << std::endl;  // Convert seconds to microseconds
 
     //####################################### WRITE OUTPUT ###########################################
     // Open Output File
