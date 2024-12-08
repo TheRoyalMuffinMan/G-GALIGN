@@ -2,6 +2,8 @@
 #include <fstream>
 #include <string>
 #include <chrono>
+#include <mutex>
+#include <thread>
 #include "include/cmd.hpp"
 #include "include/fasta.hpp"
 #include "include/globals.hpp"
@@ -9,6 +11,29 @@
 // Set to 0 to disable debugging
 #define DDEBUG 1
 #define nTHREADS 3 // CHANGE TO INCREASE MAX NUM THREADS / Matrix Sub-Blocks
+
+// GLOBAL VALUES //
+// Global 2D Array For Alignment Scores & Their Directions & ACSII Symbol
+int64_t** matrixValues;
+char** matrixDir;
+char** matrixSym;
+
+// Alignment Scoring Values & Sequences
+int gap_penalty;
+int mismatch;
+int match;
+int queryL;
+int refL;
+std::string rawQuery;
+std::string rawReference;
+bool ignoreSEGaps = false; //args.ignore_outer_gaps;
+
+// Mutex & Semaphores 
+std::mutex exclusive; // Mutex Lock for Alignment
+std::mutex threadLock; // Lock for adding threads to the thread list/pool
+
+// Thread List/Pool
+std::thread threadList[nTHREADS];
 
 // Thread Block Class
 class threadBlock {
@@ -19,6 +44,90 @@ class threadBlock {
         int endRow = -1;
 };
 
+// Thread Alignment Function
+void blockAlign(int startRow, int stopRow, int startCol, int stopCol)
+{
+    // Loop over all matrix values starting at (1,1)
+    for(int q = startRow; q < stopRow; q++)
+    {
+        for(int r = startCol; r < stopCol; r++) 
+        {
+            // Score Variables for each of the 3 possible directions
+            int64_t leftTile = 0;
+            int64_t upTile = 0;
+            int64_t diaTile = 0;
+
+            // LEFT SCORE
+            // If we are on the last column & ignoring start/end gap penalties
+            if (r == (refL) && ignoreSEGaps == true)
+            {
+                leftTile = matrixValues[q][r-1] + 0;
+            }
+            // Otherwise add normal gap penalty to left tile's score
+            else
+            {
+                leftTile = matrixValues[q][r-1] + gap_penalty;
+            }
+
+            // ABOVE SCORE
+            // If we are on the last row & ignoring start/end gap penalties
+            if (q == (queryL) && ignoreSEGaps == true)
+            {
+                upTile = matrixValues[q-1][r] + 0;
+            }
+
+            // Otherwise add normal gap penalty to above tile's score
+            else
+            {
+                upTile = matrixValues[q-1][r] + gap_penalty;
+            }
+
+            // DIAGONAL SCORE
+            char maxSym = '_';
+            if (rawQuery[q-1] == rawReference[r-1]) // Match Num - 1, as the refrences start at 0 to M but the matrix goes from 0 to M+1 due to the additional init row/col
+            {
+                diaTile = matrixValues[q-1][r-1] + match; // Add match score to upper diagonal's score
+                maxSym = '|'; // Match Symbol
+            }
+            else
+            {
+                diaTile = matrixValues[q-1][r-1] + mismatch; // Add mismatch score to upper diagonal's score
+                maxSym = 'x'; // Mismatch Symbol
+            }
+
+            // Save the Best Score
+            int64_t maxScore = diaTile; // Default Diagonal Tile
+            char maxDir = 'D'; // Direction we used to calculate the score for this tile
+            // If the score from coming from above is bigger switch the max score, and maxDir values
+            if (upTile > maxScore)
+            {
+                maxScore = upTile;
+                maxDir = 'U';
+                maxSym = ' '; // Store symbol for a gap
+            }
+            // If the score from the left gap addition is bigger
+            if (leftTile > maxScore)
+            {
+                maxScore = leftTile;
+                maxDir = 'L';
+                maxSym = ' ';
+            }
+
+            // Get the mutex lock
+            exclusive.lock();
+
+            // Store the max score, and its corresponding direction and visualization symbol
+            matrixValues[q][r] = maxScore;
+            matrixDir[q][r] = maxDir;
+            matrixSym[q][r] = maxSym;
+
+            // Release the mutex lock
+            exclusive.unlock();
+        }
+    }
+}
+
+// Main Function
 int main(int argc, char *argv[]) {
     CommandLineArgs args(argc, argv);
     if (args.parse() != 0) {
@@ -46,23 +155,23 @@ int main(int argc, char *argv[]) {
 
     // Get the arguments
     std::string output_file = args.output;
-    int gap_penalty = args.gap_penalty;
-    int mismatch = args.mismatch_penalty;
-    int match = args.match_score;
-    bool ignoreSEGaps = false; //args.ignore_outer_gaps;
+    gap_penalty = args.gap_penalty;
+    mismatch = args.mismatch_penalty;
+    match = args.match_score;
+    ignoreSEGaps = false; //args.ignore_outer_gaps;
 
     // The raw query and reference strings
-    std::string rawQuery = query.sequence;
-    std::string rawReference = reference.sequence;
+    rawQuery = query.sequence;
+    rawReference = reference.sequence;
 
     // Get the length of both sequences
-    int queryL = rawQuery.length() + 1;
-    int refL = rawReference.length() + 1;
+    queryL = rawQuery.length() + 1;
+    refL = rawReference.length() + 1;
 
     // Create 2D Array For alignment scores & their directions & ACSII Symbol (| = match, x = missmatch, " " = gap, S = start)
-    int64_t** matrixValues = new int64_t*[queryL];
-    char** matrixDir = new char*[queryL];
-    char** matrixSym = new char*[queryL];
+    matrixValues = new int64_t*[queryL];
+    matrixDir = new char*[queryL];
+    matrixSym = new char*[queryL];
 
     // Manually Building a dynamically allocated 2D Array
     for (int i = 0; i < queryL; i++)
@@ -165,7 +274,7 @@ int main(int argc, char *argv[]) {
         {
             // ROW //
             // Calculate a new block moving along the rows (col values stay the same)
-            int newStartRow = existingBlocks[n].endRow + 1;
+            int newStartRow = existingBlocks[n].endRow;
             int newStopRow = existingBlocks[n].endRow + numRowsToAdd;
 
             // Check if this block is out of bounds (error state)
@@ -202,16 +311,16 @@ int main(int argc, char *argv[]) {
                 newBlocks[newBlockIndex].endRow = newStopRow;
                 newBlockIndex++;
 
-                // Get the Row, Col, Reference Segment, & Sequence Segment
-
                 // Create a new Thread
-                std::cout << "R : Itteration " << numThreads << "  New Block: " << existingBlocks[n].startCol << " Col End: " << existingBlocks[n].endCol << " Row Start: " << newStartRow << " Row End: " <<  newStopRow << "\n";
-
+                //std::cout << "R : Itteration " << numThreads << "  New Block: " << existingBlocks[n].startCol << " Col End: " << existingBlocks[n].endCol << " Row Start: " << newStartRow << " Row End: " <<  newStopRow << "\n";
+                threadLock.lock(); // Get Lock
+                threadList[newBlockIndex-1] = std::thread (blockAlign, newStartRow, newStopRow, existingBlocks[n].startCol, existingBlocks[n].endCol);
+                threadLock.unlock(); // Release Lock
             }
 
             // COL //
             // Calculate a new block moving along the cols (row values stay the same)
-            int newStartCol = existingBlocks[n].endCol + 1;
+            int newStartCol = existingBlocks[n].endCol;
             int newStopCol = existingBlocks[n].endCol + numColsToAdd;
 
             // Check if this block is out of bounds (error state)
@@ -248,10 +357,11 @@ int main(int argc, char *argv[]) {
                 newBlocks[newBlockIndex].endRow = existingBlocks[n].endRow;
                 newBlockIndex++;
 
-                // Get the Row, Col, Reference Segment, & Sequence Segment
-
                 // Create a new Thread
-                std::cout << "C : Itteration " << numThreads << "  New Block: " << newStartCol << " Col End: " << newStopCol << " Row Start: " << existingBlocks[n].startRow << " Row Stop: " <<  existingBlocks[n].endRow << "\n";
+                //std::cout << "C : Itteration " << numThreads << "  New Block: " << newStartCol << " Col End: " << newStopCol << " Row Start: " << existingBlocks[n].startRow << " Row Stop: " <<  existingBlocks[n].endRow << "\n";
+                threadLock.lock();
+                threadList[newBlockIndex-1] = std::thread (blockAlign, existingBlocks[n].startRow, existingBlocks[n].endRow, newStartCol, newStopCol);
+                threadLock.unlock();
             }
         }
 
@@ -264,10 +374,16 @@ int main(int argc, char *argv[]) {
             newBlocks[0].endCol = numColsToAdd;
             newBlocks[0].endRow = numRowsToAdd;
 
-            // Get the Row, Col, Reference Segment, & Sequence Segment
-
             // Create the thread
-            std::cout << " Num Col " << numColsToAdd << " Num Rows " << numRowsToAdd << "\n";
+            //std::cout << " Num Col " << numColsToAdd << " Num Rows " << numRowsToAdd << "\n";
+            std::thread t0(blockAlign, 1, numRowsToAdd, 1, numRowsToAdd);
+            t0.join(); // Wait for Thread to Complete (Only 1 Thread in this Itteration)
+        }
+
+        // Wait for all the threads to complete before the next itteration
+        for (int x=0; x < newBlockIndex; x++)
+        {
+            threadList[x].join();
         }
 
         // Increase the thread count by 1 
@@ -292,7 +408,7 @@ int main(int argc, char *argv[]) {
         {
             // ROW //
             // Calculate a new block moving along the rows (col values stay the same)
-            int newStartRow = existingBlocks[n].endRow + 1;
+            int newStartRow = existingBlocks[n].endRow;
             int newStopRow = existingBlocks[n].endRow + numRowsToAdd;
 
             // Check if this block is NOT out of bounds (error state)
@@ -325,17 +441,17 @@ int main(int argc, char *argv[]) {
                     newBlocks[newBlockIndex].endRow = newStopRow;
                     newBlockIndex++;
 
-                    // Get the Row, Col, Reference Segment, & Sequence Segment
-
                     // Create a new Thread
-                    std::cout << "RD : Itteration " << numThreads << "  New Block: " << existingBlocks[n].startCol << " Col End: " << existingBlocks[n].endCol << " Row Start: " << newStartRow << " Row End: " <<  newStopRow << "\n";
-
+                    //std::cout << "RD : Itteration " << numThreads << "  New Block: " << existingBlocks[n].startCol << " Col End: " << existingBlocks[n].endCol << " Row Start: " << newStartRow << " Row End: " <<  newStopRow << "\n";
+                    threadLock.lock(); // Get Lock
+                    threadList[newBlockIndex-1] = std::thread (blockAlign, newStartRow, newStopRow, existingBlocks[n].startCol, existingBlocks[n].endCol);
+                    threadLock.unlock(); // Release Lock
                 }
             }
 
             // COL //
             // Calculate a new block moving along the cols (row values stay the same)
-            int newStartCol = existingBlocks[n].endCol + 1;
+            int newStartCol = existingBlocks[n].endCol;
             int newStopCol = existingBlocks[n].endCol + numColsToAdd;
 
             // Check if this block is NOT out of bounds (error state)
@@ -368,12 +484,19 @@ int main(int argc, char *argv[]) {
                     newBlocks[newBlockIndex].endRow = existingBlocks[n].endRow;
                     newBlockIndex++;
 
-                    // Get the Row, Col, Reference Segment, & Sequence Segment
-
                     // Create a new Thread
-                    std::cout << "CD : Itteration " << numThreads << "  New Block: " << newStartCol << " Col End: " << newStopCol << " Row Start: " << existingBlocks[n].startRow << " Row Stop: " <<  existingBlocks[n].endRow << "\n";
+                    //std::cout << "CD : Itteration " << numThreads << "  New Block: " << newStartCol << " Col End: " << newStopCol << " Row Start: " << existingBlocks[n].startRow << " Row Stop: " <<  existingBlocks[n].endRow << "\n";
+                    threadLock.lock();
+                    threadList[newBlockIndex-1] = std::thread (blockAlign, existingBlocks[n].startRow, existingBlocks[n].endRow, newStartCol, newStopCol);
+                    threadLock.unlock();
                 }
             }
+        }
+
+        // Wait for all the threads to complete before the next itteration
+        for (int x=0; x < newBlockIndex; x++)
+        {
+            threadList[x].join();
         }
 
         // Decrease the thread count by 1 
