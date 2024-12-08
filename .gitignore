@@ -51,6 +51,8 @@ build
 # Ignore dump folder
 dump/
 
+*.csv
+
 # Ignore all executable files
 .galign_benchmark
 

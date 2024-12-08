@@ -347,7 +347,7 @@ int main(int argc, char *argv[]) {
 
     auto memory_end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> memory_duration = memory_end - memory_start;
-    std::cout << "Execution time: " 
+    std::cout << "Memory + Execution time: " 
               << memory_duration.count() << " seconds" << std::endl;  // Convert seconds to microseconds
 
     //####################################### WRITE OUTPUT ###########################################
