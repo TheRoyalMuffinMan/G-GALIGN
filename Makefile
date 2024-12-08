@@ -57,4 +57,4 @@ $(GPU): $(GPU).cu $(LIBRARY_OBJ)
 clean:
 	rm -rf $(BUILD_PATH)/lib$(LIBRARY_NAME).so $(SINGLE) $(MULTI) $(GPU) $(OBJDIR)
 
-.PHONY: all lib clean
+.PHONY: all lib single multi gpu clean
