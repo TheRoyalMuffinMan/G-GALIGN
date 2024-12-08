@@ -22,27 +22,27 @@
     } while (0)
 
 // Prints the matrix (USED FOR DEBUG PURPOSES)
-void print_matrix(int64_t *table, int64_t m, int64_t n) {
+void print_matrix(int32_t *table, int32_t m, int32_t n) {
     std::cout << "DP Matrix: " << std::endl;
-    for (int64_t i = 0; i < m; ++i) {
-        for (int64_t j = 0; j < n; ++j) {
+    for (int32_t i = 0; i < m; ++i) {
+        for (int32_t j = 0; j < n; ++j) {
             std::cout << table[i * n + j] << " ";
         }
     }
 }
 
 // Helps compute the 1-D position using 2-D indexing for the table
-__host__ __device__ int get_position(int64_t row, int64_t col, int64_t num_cols) {
+__host__ __device__ int get_position(int32_t row, int32_t col, int32_t num_cols) {
     return row * num_cols + col;
 }
 
 // Initializes the gap penalties for the first row and column
-__global__ void init_gaps(int64_t *dp_table, int64_t m, int64_t n, int gap_penalty) {
+__global__ void init_gaps(int32_t *dp_table, int32_t m, int32_t n, int gap_penalty) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
 
     // Initializes the first column for all rows (dp_table[idx * n])
     if (idx < m) {
-        int64_t row_position = idx * n;
+        int32_t row_position = idx * n;
         dp_table[row_position] = gap_penalty * idx;
     }
 
@@ -54,20 +54,20 @@ __global__ void init_gaps(int64_t *dp_table, int64_t m, int64_t n, int gap_penal
 
 // Processes an anti-diagonal in the DP table using start and end positions
 __global__ void solve_anti_diagonal(char *query, char *reference,
-                                    int64_t *dp_table, size_t data_size, 
-                                    int64_t m, int64_t n, 
-                                    int64_t start_row, int64_t start_col,
-                                    int64_t end_row, int64_t end_col,
+                                    int32_t *dp_table, size_t data_size, 
+                                    int32_t m, int32_t n, 
+                                    int32_t start_row, int32_t start_col,
+                                    int32_t end_row, int32_t end_col,
                                     int gap_penalty, int mismatch_penalty, int match_score) {
                          
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     // Gets next row and col, as well as the 1D index
-    int64_t new_row = start_row - idx, new_col = start_col + idx;
-    int64_t position = get_position(new_row, new_col, n);
+    int32_t new_row = start_row - idx, new_col = start_col + idx;
+    int32_t position = get_position(new_row, new_col, n);
 
     // Checks if the thread is within range and we aren't at the end position
     if (position < data_size && new_row >= end_row && new_col < end_col) {
-        int64_t diagonal = 0, top = 0, left = 0;
+        int32_t diagonal = 0, top = 0, left = 0;
         if (query[new_row - 1] == reference[new_col - 1]) {
             diagonal = dp_table[get_position(new_row - 1, new_col - 1, n)] + match_score;
         } else {
@@ -84,9 +84,9 @@ __global__ void solve_anti_diagonal(char *query, char *reference,
 // Generates the traceback strings and acquires alignment score for the CPU
 // NOTE: This is done serially (or with 1 GPU thread)
 __global__ void build_traceback(char *query, char *reference, 
-                                int64_t *dp_table, int64_t m, int64_t n, int64_t *alignment_score,
+                                int32_t *dp_table, int32_t m, int32_t n, int32_t *alignment_score,
                                 char *updated_query, char *alignment, char *updated_reference,
-                                int64_t match_score, int64_t mismatch_penalty, int64_t gap_penalty) {
+                                int32_t match_score, int32_t mismatch_penalty, int32_t gap_penalty) {
     
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx != 0) return; // Single-threaded traceback
@@ -95,13 +95,13 @@ __global__ void build_traceback(char *query, char *reference,
     *alignment_score = dp_table[get_position(m - 1, n - 1, n)];
 
     // Build mapping from computed DP table
-    int64_t row = m - 1, col = n - 1;
-    int64_t q_i = 0, a_i = 0, r_i = 0;
+    int32_t row = m - 1, col = n - 1;
+    int32_t q_i = 0, a_i = 0, r_i = 0;
     while (row > 0 && col > 0) {
-        int64_t match = dp_table[get_position(row - 1, col - 1, n)] + match_score;
-        int64_t mismatch = dp_table[get_position(row - 1, col - 1, n)] + mismatch_penalty;
-        int64_t top = dp_table[get_position(row - 1, col, n)] + gap_penalty;
-        int64_t left = dp_table[get_position(row, col - 1, n)] + gap_penalty;
+        int32_t match = dp_table[get_position(row - 1, col - 1, n)] + match_score;
+        int32_t mismatch = dp_table[get_position(row - 1, col - 1, n)] + mismatch_penalty;
+        int32_t top = dp_table[get_position(row - 1, col, n)] + gap_penalty;
+        int32_t left = dp_table[get_position(row, col - 1, n)] + gap_penalty;
 
         // Two sequences matched in this position
         if (query[row - 1] == reference[col - 1] && match == dp_table[get_position(row, col, n)]) {
@@ -162,22 +162,22 @@ Result parallel_needleman_wunsch(std::string reference, std::string query,
                                  int gap_penalty, int mismatch_penalty, int match_score) {
 
     Result res = {.score = 0, .updated_query = "", .alignment = "", .updated_ref = ""};
-    int64_t m = query.size() + 1, n = reference.size() + 1;
-    int64_t anti_diagonals = m + n - 3; // Discount 2 gap (row and column)
-    int64_t nthreads;
-    int64_t nblocks;
-    size_t data_size = sizeof(int64_t) * m * n;
+    int32_t m = query.size() + 1, n = reference.size() + 1;
+    int32_t anti_diagonals = m + n - 3; // Discount 2 gap (row and column)
+    int32_t nthreads;
+    int32_t nblocks;
+    size_t data_size = sizeof(int32_t) * m * n;
     size_t alignment_size = m + n + 1;
     int device_count;
 
     // Device (GPU) Addresses
-    int64_t *device_dp_table = nullptr;
-    int64_t *device_alignment_score;
+    int32_t *device_dp_table = nullptr;
+    int32_t *device_alignment_score;
     char *device_query = nullptr, *device_reference = nullptr;
     char *device_updated_query = nullptr, *device_alignment = nullptr, *device_updated_reference = nullptr;
 
     // Host (CPU) Addresses
-    int64_t *host_alignment_score;
+    int32_t *host_alignment_score;
     char *host_updated_query = nullptr, *host_alignment = nullptr, *host_updated_reference = nullptr;
 
     // Begin timing for memory operations + DP table computation
@@ -190,7 +190,7 @@ Result parallel_needleman_wunsch(std::string reference, std::string query,
     checkCudaErrors(cudaSetDevice(DEFAULT_GPU_ID));
 
     // Allocate pinned (page-locked) memory on the host
-    checkCudaErrors(cudaHostAlloc(&host_alignment_score, sizeof(int64_t), cudaHostAllocDefault));
+    checkCudaErrors(cudaHostAlloc(&host_alignment_score, sizeof(int32_t), cudaHostAllocDefault));
     checkCudaErrors(cudaHostAlloc(&host_updated_query, alignment_size, cudaHostAllocDefault));
     checkCudaErrors(cudaHostAlloc(&host_alignment, alignment_size, cudaHostAllocDefault));
     checkCudaErrors(cudaHostAlloc(&host_updated_reference, alignment_size, cudaHostAllocDefault));
@@ -199,7 +199,7 @@ Result parallel_needleman_wunsch(std::string reference, std::string query,
     checkCudaErrors(cudaMalloc(&device_dp_table, data_size));
 
     // Allocate memory on the GPU for alignment score
-    checkCudaErrors(cudaMalloc(&device_alignment_score, sizeof(int64_t)));
+    checkCudaErrors(cudaMalloc(&device_alignment_score, sizeof(int32_t)));
 
     // Allocate memory for query and reference strings on the GPU
     checkCudaErrors(cudaMalloc(&device_query, query.size()));
@@ -229,9 +229,9 @@ Result parallel_needleman_wunsch(std::string reference, std::string query,
 
     /****   Begin needleman wunsch anti-diagonal approach on the GPU   ****/
     /***  We will spawn out a kernel invocation for each anti-diagonal  ***/
-    int64_t start_row = 0, start_col = 1;
-    int64_t end_row = 0, end_col = 1;
-    for (int64_t diag = 0; diag < anti_diagonals; diag++) {
+    int32_t start_row = 0, start_col = 1;
+    int32_t end_row = 0, end_col = 1;
+    for (int32_t diag = 0; diag < anti_diagonals; diag++) {
         
         // Computes the start position and end position of the given
         // anti-diagonal in order to process it on the GPU, ex:
@@ -247,7 +247,7 @@ Result parallel_needleman_wunsch(std::string reference, std::string query,
          *         Ʌ   Ʌ   Ʌ   Ʌ
          *         s   s   s   s
         */
-        int64_t cells = 0;
+        int32_t cells = 0;
         if (start_row < m - 1) {
             start_row++;
             if (end_col + 1 < n) {
@@ -266,7 +266,7 @@ Result parallel_needleman_wunsch(std::string reference, std::string query,
 
         // Spawn out threads based on distance and solve current anti-diagonal
         // Uses the number of cells (distance between start and end positions) to determine number of threads and blocks
-        nthreads = std::min(static_cast<int64_t>(DEFAULT_THREAD_SIZE), cells);
+        nthreads = std::min(static_cast<int32_t>(DEFAULT_THREAD_SIZE), cells);
         nblocks = (cells + nthreads - 1) / nthreads;
         #if (DDEBUG != 0)
             std::cout << "(nThreads = " << nthreads << ", nBlocks = " << nblocks << ")" << std::endl;
@@ -299,7 +299,7 @@ Result parallel_needleman_wunsch(std::string reference, std::string query,
     );
 
     // Copy score, updated query, alignment, and updated reference strings from the GPU back to the CPU
-    checkCudaErrors(cudaMemcpy(host_alignment_score, device_alignment_score, sizeof(int64_t), cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpy(host_alignment_score, device_alignment_score, sizeof(int32_t), cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaMemcpy(host_updated_query, device_updated_query, alignment_size, cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaMemcpy(host_alignment, device_alignment, alignment_size, cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaMemcpy(host_updated_reference, device_updated_reference, alignment_size, cudaMemcpyDeviceToHost));
