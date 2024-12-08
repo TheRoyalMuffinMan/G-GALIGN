@@ -21,24 +21,22 @@
         }                                                               \
     } while (0)
 
-void print_matrix(int64_t *matrix, int64_t m, int64_t n) {
-    int count = 0;
+// Prints the matrix (USED FOR DEBUG PURPOSES)
+void print_matrix(int64_t *table, int64_t m, int64_t n) {
     std::cout << "DP Matrix: " << std::endl;
     for (int64_t i = 0; i < m; ++i) {
         for (int64_t j = 0; j < n; ++j) {
-            std::cout << matrix[i * n + j] << " ";
-            if (matrix[i * n + j] != 0) count++;
+            std::cout << table[i * n + j] << " ";
         }
-        std::cout << std::endl;
     }
-    std::cout << "Non-zero entries: " << count << std::endl;
 }
 
-// Helps compute the 1-D position using 2-D indexing for the matrix
+// Helps compute the 1-D position using 2-D indexing for the table
 __host__ __device__ int get_position(int64_t row, int64_t col, int64_t num_cols) {
     return row * num_cols + col;
 }
 
+// Initializes the gap penalties for the first row and column
 __global__ void init_gaps(int64_t *dp_table, int64_t m, int64_t n, int gap_penalty) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -54,12 +52,13 @@ __global__ void init_gaps(int64_t *dp_table, int64_t m, int64_t n, int gap_penal
     }
 }
 
-__global__ void solve_anti_diagonals(char *query, char *reference,
-                                     int64_t *dp_table, size_t data_size, 
-                                     int64_t m, int64_t n, 
-                                     int64_t start_row, int64_t start_col,
-                                     int64_t end_row, int64_t end_col,
-                                     int gap_penalty, int mismatch_penalty, int match_score) {
+// Processes an anti-diagonal in the DP table using start and end positions
+__global__ void solve_anti_diagonal(char *query, char *reference,
+                                    int64_t *dp_table, size_t data_size, 
+                                    int64_t m, int64_t n, 
+                                    int64_t start_row, int64_t start_col,
+                                    int64_t end_row, int64_t end_col,
+                                    int gap_penalty, int mismatch_penalty, int match_score) {
                                         
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     int64_t new_row = start_row - idx, new_col = start_col + idx;
@@ -81,17 +80,107 @@ __global__ void solve_anti_diagonals(char *query, char *reference,
     }
 }
 
-Result needleman_wunsch(std::string reference, std::string query, 
-                        int gap_penalty, int mismatch_penalty, 
-                        int match_score, int ignore_outer_gaps) {
+// Generates the traceback strings and acquires alignment score for the CPU
+// NOTE: This is done serially (or with 1 GPU thread)
+__global__ void build_traceback(char *query, char *reference, 
+                                int64_t *dp_table, int64_t m, int64_t n, int64_t *alignment_score,
+                                char *updated_query, char *alignment, char *updated_reference,
+                                int64_t match_score, int64_t mismatch_penalty, int64_t gap_penalty) {
+    
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx != 0) return; // Single-threaded traceback
+
+    // Save alignment score for these two sequences
+    *alignment_score = dp_table[get_position(m - 1, n - 1, n)];
+
+    // Build mapping from computed DP table
+    int64_t row = m - 1, col = n - 1;
+    int64_t q_i = 0, a_i = 0, r_i = 0;
+    while (row > 0 && col > 0) {
+        int64_t match = dp_table[get_position(row - 1, col - 1, n)] + match_score;
+        int64_t mismatch = dp_table[get_position(row - 1, col - 1, n)] + mismatch_penalty;
+        int64_t top = dp_table[get_position(row - 1, col, n)] + gap_penalty;
+        int64_t left = dp_table[get_position(row, col - 1, n)] + gap_penalty;
+
+        // Two sequences matched in this position
+        if (query[row - 1] == reference[col - 1] && match == dp_table[get_position(row, col, n)]) {
+            alignment[a_i++] = '|';
+            updated_query[q_i++] = query[row - 1];
+            updated_reference[r_i++] = reference[col - 1];
+            row = row - 1;
+            col = col - 1;
+        } 
+        // Two sequences mismatched in this position
+        else if (mismatch == dp_table[get_position(row, col, n)]) {
+            alignment[a_i++] = 'x';
+            updated_query[q_i++] = query[row - 1];
+            updated_reference[r_i++] = reference[col - 1];
+            row = row - 1;
+            col = col - 1;
+        } 
+        // Came from top gap to get to this position
+        else if (top == dp_table[get_position(row, col, n)]) {
+            alignment[a_i++] = ' ';
+            updated_query[q_i++] = query[row - 1];
+            updated_reference[r_i++] = '_';
+            row = row - 1;
+        } 
+        // Came from left gap to get to this position
+        else if (left == dp_table[get_position(row, col, n)]) {
+            alignment[a_i++] = ' ';
+            updated_query[q_i++] = '_';
+            updated_reference[r_i++] = reference[col - 1];
+            col = col - 1;
+        }
+    }
+
+    // Clean up remaining rows, move cells upward until we reach (0, 0)
+    while (row > 0) {
+        alignment[a_i++] = ' ';
+        updated_query[q_i++] = query[row - 1];
+        updated_reference[r_i++] = '_';
+        row = row - 1;
+    }
+
+    // Clean up remaining columns, move cells leftward until we reach (0, 0)
+    while (col > 0) {
+        alignment[a_i++] = ' ';
+        updated_query[q_i++] = '_';
+        updated_reference[r_i++] = reference[col - 1];
+        col = col - 1;
+    }
+    
+    // Set null terminating character to end aligned strings
+    alignment[a_i] = '\0';
+    updated_query[q_i] = '\0';
+    updated_reference[r_i] = '\0';
+}
+
+// Computes the needleman wunsch sequence alignment algorithm on the GPU
+Result parallel_needleman_wunsch(std::string reference, std::string query, 
+                                 int gap_penalty, int mismatch_penalty, int match_score) {
+
     Result res = {.score = 0, .updated_query = "", .alignment = "", .updated_ref = ""};
     int64_t m = query.size() + 1, n = reference.size() + 1;
-    int64_t *device_dp_table = nullptr;
-    int64_t *host_dp_table = new int64_t[m * n];
     int64_t anti_diagonals = m + n - 3; // Discount 2 gap (row and column)
+    int64_t nthreads;
+    int64_t nblocks;
     size_t data_size = sizeof(int64_t) * m * n;
-    char *device_query = nullptr, *device_reference = nullptr;
+    size_t alignment_size = m + n + 1;
     int device_count;
+
+    // Device (GPU) Addresses
+    int64_t *device_dp_table = nullptr;
+    int64_t *device_alignment_score;
+    char *device_query = nullptr, *device_reference = nullptr;
+    char *device_updated_query = nullptr, *device_alignment = nullptr, *device_updated_reference = nullptr;
+
+    // Host (CPU) Addresses
+    int64_t *host_alignment_score;
+    char *host_updated_query = nullptr, *host_alignment = nullptr, *host_updated_reference = nullptr;
+
+    // Begin timing for memory operations + DP table computation
+    auto memory_execution_start = std::chrono::high_resolution_clock::now();
 
     // Get GPU counts
     checkCudaErrors(cudaGetDeviceCount(&device_count));
@@ -99,21 +188,38 @@ Result needleman_wunsch(std::string reference, std::string query,
     // Utilize single GPU for processing
     checkCudaErrors(cudaSetDevice(DEFAULT_GPU_ID));
 
-    // Allocate memory on the GPU for the DP matrix (might need to tile this)
+    // Allocate pinned (page-locked) memory on the host
+    checkCudaErrors(cudaHostAlloc(&host_alignment_score, sizeof(int64_t), cudaHostAllocDefault));
+    checkCudaErrors(cudaHostAlloc(&host_updated_query, alignment_size, cudaHostAllocDefault));
+    checkCudaErrors(cudaHostAlloc(&host_alignment, alignment_size, cudaHostAllocDefault));
+    checkCudaErrors(cudaHostAlloc(&host_updated_reference, alignment_size, cudaHostAllocDefault));
+
+    // Allocate memory on the GPU for the DP table
     checkCudaErrors(cudaMalloc(&device_dp_table, data_size));
+
+    // Allocate memory on the GPU for alignment score
+    checkCudaErrors(cudaMalloc(&device_alignment_score, sizeof(int64_t)));
 
     // Allocate memory for query and reference strings on the GPU
     checkCudaErrors(cudaMalloc(&device_query, query.size()));
     checkCudaErrors(cudaMalloc(&device_reference, reference.size()));
 
-    // Copy query and reference strings to GPU
+    // Over-allocate memory for the aligned query, alignment, and aligned reference string 
+    // (the strings shouldn't be greater than m + n)
+    checkCudaErrors(cudaMalloc(&device_updated_query, alignment_size));
+    checkCudaErrors(cudaMalloc(&device_alignment, alignment_size));
+    checkCudaErrors(cudaMalloc(&device_updated_reference, alignment_size));
+
+    // Copy query and reference strings to the GPU
     checkCudaErrors(cudaMemcpy(device_query, query.c_str(), query.size(), cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(device_reference, reference.c_str(), reference.size(), cudaMemcpyHostToDevice));
 
+    // Get start time for computing table (include initialize gaps and compute DP)
+    auto execution_start = std::chrono::high_resolution_clock::now();
+
     // Initialize the gaps of the row and column
-    auto start = std::chrono::high_resolution_clock::now();
-    int64_t nthreads = DEFAULT_THREAD_SIZE;
-    int64_t nblocks = (std::max(m, n) + nthreads - 1) / nthreads;
+    nthreads = DEFAULT_THREAD_SIZE;
+    nblocks = (std::max(m, n) + nthreads - 1) / nthreads;
     #if (DDEBUG != 0)
         std::cout << "(nThreads = " << nthreads << ", nBlocks = " << nblocks << ")" << std::endl;
         std::cout << "(m = " << m << ", n = " << n << ")" << std::endl;
@@ -137,7 +243,7 @@ Result needleman_wunsch(std::string reference, std::string query,
          * 0 s>1   2   3   4   5 < e
          * 0 s>1   2   3   4   5 < e
          * 0 s>1   2   3   4   5 < e
-         *         ^   ^   ^   ^
+         *         Ʌ   Ʌ   Ʌ   Ʌ
          *         s   s   s   s
         */
         int64_t cells = 0;
@@ -158,11 +264,16 @@ Result needleman_wunsch(std::string reference, std::string query,
         }
 
         // Spawn out threads based on distance and solve current anti-diagonal
-        // Uses the number of cells (distance between start and end positions) to determine
-        // number of threads and blocks
-        int64_t nthreads = std::min(static_cast<int64_t>(DEFAULT_THREAD_SIZE), cells);
-        int64_t nblocks = (cells + nthreads - 1) / nthreads;
-        solve_anti_diagonals<<<nthreads, nblocks>>>(
+        // Uses the number of cells (distance between start and end positions) to determine number of threads and blocks
+        nthreads = std::min(static_cast<int64_t>(DEFAULT_THREAD_SIZE), cells);
+        nblocks = (cells + nthreads - 1) / nthreads;
+        #if (DDEBUG != 0)
+            std::cout << "(nThreads = " << nthreads << ", nBlocks = " << nblocks << ")" << std::endl;
+            std::cout << "start_row, start_col: (" << start_row << ", " << start_col 
+                      << "), end_row, end_col: (" << end_row << ", " << end_col << ")" 
+                      << std::endl;
+        #endif
+        solve_anti_diagonal<<<nthreads, nblocks>>>(
             device_query, device_reference,
             device_dp_table, data_size,
             m, n, 
@@ -172,85 +283,52 @@ Result needleman_wunsch(std::string reference, std::string query,
         );
     }
 
-    // Insure all kernels have finished executing
-    cudaDeviceSynchronize();
-
-    // Get time taken to compute matrix (include initialize gaps and compute DP)
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration = end - start;
+    // Get end time for computing table (include initialize gaps and compute DP)
+    auto execution_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> execution_duration = execution_end - execution_start;
     std::cout << "Execution time: " 
-              << duration.count() << " seconds" << std::endl;  // Convert seconds to microseconds
+              << execution_duration.count() << " seconds" << std::endl;
+
+    // Builds the traceback computed from needleman wunsch using single thread and block
+    build_traceback<<<1, 1>>>(
+        device_query, device_reference,
+        device_dp_table, m, n, device_alignment_score, 
+        device_updated_query, device_alignment, device_updated_reference,
+        match_score, mismatch_penalty, gap_penalty
+    );
+
+    // Copy score, updated query, alignment, and updated reference strings from the GPU back to the CPU
+    checkCudaErrors(cudaMemcpy(host_alignment_score, device_alignment_score, sizeof(int64_t), cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpy(host_updated_query, device_updated_query, alignment_size, cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpy(host_alignment, device_alignment, alignment_size, cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpy(host_updated_reference, device_updated_reference, alignment_size, cudaMemcpyDeviceToHost));
     
-    // Copy the result matrix from device to host
-    checkCudaErrors(cudaMemcpy(host_dp_table, device_dp_table, data_size, cudaMemcpyDeviceToHost));
+    // End timing for memory operations + DP table computation
+    auto memory_execution_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> memory_execution_duration = memory_execution_end - memory_execution_start;
+    std::cout << "Memory + Execution time: " 
+              << memory_execution_duration.count() << " seconds" << std::endl;
+    
+    // Get score and convert character arrays to strings
+    res.score = *host_alignment_score;
+    res.updated_query = std::string(host_updated_query);
+    res.alignment = std::string(host_alignment);
+    res.updated_ref = std::string(host_updated_reference);
 
-    // Print the 2D matrix (from the host memory)
-    #if (DDEBUG != 0)
-        print_matrix(host_dp_table, m, n);
-    #endif
-
-    // Build mapping from computed DP table from the GPU
-    int64_t row = m - 1, col = n - 1;
-    res.score = host_dp_table[get_position(row, col, n)];
-    while (row > 0 && col > 0) {
-        int64_t match = host_dp_table[get_position(row - 1, col - 1, n)] + match_score;
-        int64_t mismatch = host_dp_table[get_position(row - 1, col - 1, n)] + mismatch_penalty;
-        int64_t top = host_dp_table[get_position(row - 1, col, n)] + gap_penalty;
-        int64_t left = host_dp_table[get_position(row, col - 1, n)] + gap_penalty;
-
-        // Two sequences matched in this position
-        if (query[row - 1] == reference[col - 1] && match == host_dp_table[get_position(row, col, n)]) {
-            res.alignment += "|";
-            res.updated_query += query[row - 1];
-            res.updated_ref += reference[col - 1];
-            row = row - 1, col = col - 1;
-        
-        // Two sequences mismatched in this position
-        } else if (mismatch == host_dp_table[get_position(row, col, n)]) {
-            res.alignment += "x";
-            res.updated_query += query[row - 1];
-            res.updated_ref += reference[col - 1];
-            row = row - 1, col = col - 1;
-        
-        // Came from top gap to get to this position
-        } else if (top == host_dp_table[get_position(row, col, n)]) {
-            res.alignment += " ";
-            res.updated_query += query[row - 1];
-            res.updated_ref += "_";
-            row = row - 1;
-        
-        // Came from left gap to get to this position
-        } else if (left == host_dp_table[get_position(row, col, n)]) {
-            res.alignment += " ";
-            res.updated_query += "_";
-            res.updated_ref += reference[col - 1];
-            col = col - 1;
-        }
-    }
-
-    // Clean up remaining rows, move cells upward until we reach (0, 0)
-    while (row > 0) {
-        res.alignment += " ";
-        res.updated_query += query[row - 1];
-        res.updated_ref += "_";
-        row = row - 1;
-    }
-
-    // Clean up remaining rows, move cells leftward until we reach (0, 0)
-    while (col > 0) {
-        res.alignment += " ";
-        res.updated_query += "_";
-        res.updated_ref += reference[col - 1];
-        col = col - 1;
-    }
+    // Free the host memory after use
+    cudaFreeHost(host_updated_query);
+    cudaFreeHost(host_alignment);
+    cudaFreeHost(host_updated_reference);
+    cudaFreeHost(host_alignment_score);
 
     // Free the device memory after use
     cudaFree(device_query);
     cudaFree(device_reference);
     cudaFree(device_dp_table);
-
-    // Free allocated host memory
-    delete[] host_dp_table;
+    cudaFree(device_updated_query);
+    cudaFree(device_alignment);
+    cudaFree(device_updated_reference);
+    cudaFree(device_alignment_score);
 
     // Reverse the sequences for the output file
     std::reverse(res.updated_query.begin(), res.updated_query.end());
@@ -283,13 +361,12 @@ int main(int argc, char *argv[]) {
     Gene query = query_fasta.genes[0];
     Gene reference = reference_fasta.genes[0];
 
-    Result res = needleman_wunsch(
+    Result res = parallel_needleman_wunsch(
         reference.sequence,
         query.sequence,
         args.gap_penalty,
         args.mismatch_penalty,
-        args.match_score,
-        args.ignore_outer_gaps
+        args.match_score
     );
 
     write_results(

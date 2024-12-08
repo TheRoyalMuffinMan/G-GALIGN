@@ -17,7 +17,6 @@ class CommandLineArgs {
         int gap_penalty;
         int mismatch_penalty;
         int match_score;
-        bool ignore_outer_gaps;
     private:
         int argc;
         char** argv;

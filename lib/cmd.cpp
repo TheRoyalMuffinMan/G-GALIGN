@@ -19,7 +19,6 @@ void CommandLineArgs::usage() const {
               << "  -g, --gap_penalty <int>         Gap penalty\n"
               << "  -p, --mismatch_penalty <int>    Mismatch penalty\n"
               << "  -m, --match_score <int>         Match score\n"
-              << "  -i, --ignore_outer_gaps         Ignore outer gaps\n"
               << "  -h, --help                      Show this help message and exit\n";
 }
 
@@ -31,7 +30,6 @@ void CommandLineArgs::print() const {
     std::cout << "Gap Penalty: " << this->gap_penalty << std::endl;
     std::cout << "Mismatch Penalty: " << this->mismatch_penalty << std::endl;
     std::cout << "Match Score: " << this->match_score << std::endl;
-    std::cout << "Ignore Outer Gaps: " << (this->ignore_outer_gaps ? "true" : "false") << std::endl;
     std::cout << std::endl;
 }
 
@@ -46,15 +44,11 @@ int CommandLineArgs::parse() {
         {"gap_penalty", required_argument, NULL, 'g'},
         {"mismatch_penalty", required_argument, NULL, 'p'},
         {"match_score", required_argument, NULL, 'm'},
-        {"ignore_outer_gaps", optional_argument, 0, 'i'},
         {"help", no_argument, NULL, 'h'}
     };
     char ch;
 
-    // Set defaults for optional arguments
-    this->ignore_outer_gaps = 0;
-
-    while ((ch = getopt_long(this->argc, this->argv, "q:r:o:g:p:m:i:h", long_options, NULL)) != -1) {
+    while ((ch = getopt_long(this->argc, this->argv, "q:r:o:g:p:m:h", long_options, NULL)) != -1) {
         switch (ch) {
             case 'q':
                 this->query = std::string(optarg);
@@ -79,9 +73,6 @@ int CommandLineArgs::parse() {
             case 'm':
                 this->match_score = std::stoi(optarg);
                 match_flag = 1;
-                break;
-            case 'i':
-                this->ignore_outer_gaps = !!std::stoi(optarg);
                 break;
             case 'h':
                 goto error;
