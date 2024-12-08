@@ -59,8 +59,9 @@ __global__ void solve_anti_diagonal(char *query, char *reference,
                                     int64_t start_row, int64_t start_col,
                                     int64_t end_row, int64_t end_col,
                                     int gap_penalty, int mismatch_penalty, int match_score) {
-                                        
+                         
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    // Gets next row and col, as well as the 1D index
     int64_t new_row = start_row - idx, new_col = start_col + idx;
     int64_t position = get_position(new_row, new_col, n);
 
@@ -224,7 +225,7 @@ Result parallel_needleman_wunsch(std::string reference, std::string query,
         std::cout << "(nThreads = " << nthreads << ", nBlocks = " << nblocks << ")" << std::endl;
         std::cout << "(m = " << m << ", n = " << n << ")" << std::endl;
     #endif
-    init_gaps<<<nthreads, nblocks>>>(device_dp_table, m, n, gap_penalty);
+    init_gaps<<<nblocks, nthreads>>>(device_dp_table, m, n, gap_penalty);
 
     /****   Begin needleman wunsch anti-diagonal approach on the GPU   ****/
     /***  We will spawn out a kernel invocation for each anti-diagonal  ***/
@@ -273,7 +274,7 @@ Result parallel_needleman_wunsch(std::string reference, std::string query,
                       << "), end_row, end_col: (" << end_row << ", " << end_col << ")" 
                       << std::endl;
         #endif
-        solve_anti_diagonal<<<nthreads, nblocks>>>(
+        solve_anti_diagonal<<<nblocks, nthreads>>>(
             device_query, device_reference,
             device_dp_table, data_size,
             m, n, 
